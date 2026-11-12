@@ -1,25 +1,46 @@
-# Entorno local de desarrollo. Asume que los repos están como carpetas hermanas:
+# Entorno de PrioMed (desarrollo local y despliegue en una sola instancia EC2).
+# Asume que los repos están como carpetas hermanas:
 #   ../priomed-classification-service
+# Los puertos se publican solo en 127.0.0.1: en EC2 el acceso público pasa por el
+# reverse proxy (Apache, ver deploy/), y PostgreSQL/Redis nunca quedan expuestos.
 services:
   classification:
     build: ../priomed-classification-service
-    ports: ["8000:8000"]
+    image: priomed-classification:latest
+    restart: unless-stopped
+    ports: ["127.0.0.1:8000:8000"]
     environment:
-      REDIS_URL: redis://redis:6379/0
-    depends_on: [redis]
+      # Orígenes de navegador autorizados (CORS). Coma-separados.
+      PRIOMED_CORS_ORIGINS: ${PRIOMED_CORS_ORIGINS:-http://localhost:5173,http://localhost:4173}
+    mem_limit: 512m
 
   postgres:
-    image: postgres:16
+    image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: priomed
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en .env}
       POSTGRES_DB: priomed
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U priomed -d priomed"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    mem_limit: 256m
 
   redis:
-    image: redis:7
-    ports: ["6379:6379"]
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru"]
+    ports: ["127.0.0.1:6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    mem_limit: 128m
 
 volumes:
   pgdata:

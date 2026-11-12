@@ -114,6 +114,12 @@ resource "aws_security_group" "data" {
     protocol        = "tcp"
     security_groups = [aws_security_group.compute.id]
   }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = [aws_vpc.main.cidr_block]
+  }
 }
 
 # ---------- Datos: PostgreSQL (RDS) ----------
@@ -161,11 +167,13 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "referrals" {
 }
 
 resource "aws_sqs_queue" "classification_dlq" {
-  name = "${var.name}-classification-dlq"
+  name                    = "${var.name}-classification-dlq"
+  sqs_managed_sse_enabled = true
 }
 
 resource "aws_sqs_queue" "classification" {
-  name = "${var.name}-classification"
+  name                    = "${var.name}-classification"
+  sqs_managed_sse_enabled = true
   redrive_policy = jsonencode({
     deadLetterTargetArn = aws_sqs_queue.classification_dlq.arn
     maxReceiveCount     = 5
