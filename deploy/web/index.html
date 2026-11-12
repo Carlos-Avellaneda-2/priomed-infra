@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PrioMed</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1b2430; --muted:#5b6675; --line:#dde2e8;
+          --accent:#1f6feb; --high:#c62828; --med:#b26a00; --low:#2e7d32; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:var(--ink); color:#fff; padding:20px 16px; }
+  header h1 { margin:0; font-size:22px; }
+  header p { margin:4px 0 0; color:#c9d1db; font-size:14px; }
+  main { max-width:960px; margin:0 auto; padding:20px 16px 40px; display:grid; gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:18px; }
+  h2 { margin:0 0 12px; font-size:17px; }
+  label { display:block; font-weight:600; margin:10px 0 4px; font-size:14px; }
+  textarea, input, select { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+  textarea { min-height:90px; resize:vertical; }
+  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  button { margin-top:14px; background:var(--accent); color:#fff; border:0; border-radius:6px; padding:9px 18px; font:inherit; font-weight:600; cursor:pointer; }
+  button.secondary { background:#fff; color:var(--accent); border:1px solid var(--accent); margin-left:6px; }
+  .status { display:inline-flex; align-items:center; gap:8px; font-weight:600; }
+  .dot { width:10px; height:10px; border-radius:50%; background:#999; }
+  .ok .dot { background:var(--low); } .fail .dot { background:var(--high); }
+  .badge { display:inline-block; padding:3px 10px; border-radius:999px; color:#fff; font-weight:700; }
+  .HIGH { background:var(--high); } .MEDIUM { background:var(--med); } .LOW { background:var(--low); }
+  dl { display:grid; grid-template-columns:max-content 1fr; gap:6px 14px; margin:12px 0 0; }
+  dt { color:var(--muted); } dd { margin:0; }
+  pre { background:#0f1720; color:#d6e2f0; padding:12px; border-radius:6px; overflow:auto; font-size:13px; }
+  ul.links { margin:0; padding-left:18px; }
+  .figs { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin-top:12px; }
+  .figs img { width:100%; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  .note { color:var(--muted); font-size:13px; }
+  @media (max-width:600px) { .row { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>PrioMed</h1>
+  <p>Clasificación de prioridad de remisiones: guardrail de reglas + ML + umbral Neyman-Pearson (prototipo académico, datos sintéticos)</p>
+</header>
+<main>
+  <section class="card">
+    <h2>Estado del servicio</h2>
+    <span id="health" class="status"><span class="dot"></span><span>Comprobando…</span></span>
+    <p class="note">API: <a href="/docs">Swagger UI (/docs)</a> · <a href="/health">/health</a> · <a href="/openapi.json">/openapi.json</a></p>
+  </section>
+
+  <section class="card">
+    <h2>Clasificar una remisión</h2>
+    <form id="form">
+      <div class="row">
+        <div>
+          <label for="rid">ID de remisión</label>
+          <input id="rid" value="demo-001" maxlength="64" required>
+        </div>
+        <div>
+          <label for="urg">Urgencia registrada por el médico</label>
+          <select id="urg">
+            <option value="0">0 · baja</option>
+            <option value="1">1 · media</option>
+            <option value="2">2 · alta</option>
+          </select>
+        </div>
+      </div>
+      <label for="text">Texto libre</label>
+      <textarea id="text" maxlength="5000" required>Paciente con dolor torácico de inicio reciente, sin alergias conocidas.</textarea>
+      <button type="submit">Clasificar</button>
+      <button type="button" class="secondary" data-ex="Sin alergias conocidas. Disnea severa desde ayer.">Ejemplo: negación previa</button>
+      <button type="button" class="secondary" data-ex="Consulta por rinorrea y tos seca de 2 semanas.">Ejemplo: benigno</button>
+      <button type="button" class="secondary" data-ex="Refiere fiebre alta y vómitos persistentes.">Ejemplo: media</button>
+    </form>
+    <div id="result" hidden>
+      <dl>
+        <dt>Prioridad</dt><dd><span id="r-priority" class="badge"></span></dd>
+        <dt>Origen</dt><dd id="r-source"></dd>
+        <dt>P(HIGH)</dt><dd id="r-score"></dd>
+        <dt>Señales de alarma</dt><dd id="r-signs"></dd>
+        <dt>Revisión humana</dt><dd id="r-review"></dd>
+      </dl>
+      <pre id="r-raw"></pre>
+    </div>
+    <p id="error" class="note" hidden></p>
+  </section>
+
+  <section class="card">
+    <h2>Documentación del proyecto</h2>
+    <ul class="links">
+      <li><a href="/docs-proyecto/Articulo_Proyecto_Triage_Expandido.docx">Artículo (.docx)</a></li>
+      <li><a href="/docs-proyecto/PrioMed_Presentacion.pptx">Presentación (.pptx)</a></li>
+      <li><a href="/docs-proyecto/evaluation_report.md">Reporte de evaluación (datos sintéticos)</a></li>
+    </ul>
+    <div class="figs">
+      <figure><img src="/docs-proyecto/fig1_enterprise.png" alt="Figura 1: arquitectura empresarial"><figcaption class="note">Figura 1 · Arquitectura empresarial</figcaption></figure>
+      <figure><img src="/docs-proyecto/fig2_application.png" alt="Figura 2: arquitectura de aplicación"><figcaption class="note">Figura 2 · Aplicación</figcaption></figure>
+      <figure><img src="/docs-proyecto/fig3_deployment.png" alt="Figura 3: despliegue"><figcaption class="note">Figura 3 · Despliegue</figcaption></figure>
+    </div>
+  </section>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  fetch("/health").then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(j => { $("health").className = "status ok"; $("health").lastElementChild.textContent = "En línea (" + j.status + ")"; })
+    .catch(e => { $("health").className = "status fail"; $("health").lastElementChild.textContent = "Sin respuesta (" + e + ")"; });
+
+  document.querySelectorAll("[data-ex]").forEach(b => b.addEventListener("click", () => {
+    $("text").value = b.dataset.ex; $("urg").value = "0"; $("form").requestSubmit();
+  }));
+
+  $("form").addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    $("error").hidden = true;
+    const body = { referral_id: $("rid").value, text: $("text").value, structured_urgency: Number($("urg").value) };
+    try {
+      const r = await fetch("/classify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(r.status + " " + JSON.stringify(j.detail ?? j));
+      $("r-priority").textContent = j.priority; $("r-priority").className = "badge " + j.priority;
+      $("r-source").textContent = j.source === "guardrail" ? "guardrail (regla de señal de alarma)" : "modelo ML + umbral NP";
+      $("r-score").textContent = j.high_score.toFixed(4);
+      $("r-signs").textContent = j.alarm_signs.length ? j.alarm_signs.join(", ") : "ninguna";
+      $("r-review").textContent = j.requires_human_review ? "sí, requerida" : "no";
+      $("r-raw").textContent = JSON.stringify(j, null, 2);
+      $("result").hidden = false;
+    } catch (e) {
+      $("error").textContent = "Error: " + e.message; $("error").hidden = false;
+    }
+  });
+</script>
+</body>
+</html>
