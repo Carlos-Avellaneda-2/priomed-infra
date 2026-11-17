@@ -4,128 +4,549 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PrioMed</title>
+<meta name="description" content="Clasificación de prioridad de remisiones médicas: regla de alarma, modelo y umbral Neyman-Pearson.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231F2D52'/%3E%3Cpath d='M13 7h6v6h6v6h-6v6h-6v-6H7v-6h6z' fill='%23FFE15A'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --ink:#1b2430; --muted:#5b6675; --line:#dde2e8;
-          --accent:#1f6feb; --high:#c62828; --med:#b26a00; --low:#2e7d32; }
-  * { box-sizing:border-box; }
-  body { margin:0; font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--ink); }
-  header { background:var(--ink); color:#fff; padding:20px 16px; }
-  header h1 { margin:0; font-size:22px; }
-  header p { margin:4px 0 0; color:#c9d1db; font-size:14px; }
-  main { max-width:960px; margin:0 auto; padding:20px 16px 40px; display:grid; gap:16px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:18px; }
-  h2 { margin:0 0 12px; font-size:17px; }
-  label { display:block; font-weight:600; margin:10px 0 4px; font-size:14px; }
-  textarea, input, select { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; }
-  textarea { min-height:90px; resize:vertical; }
-  .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-  button { margin-top:14px; background:var(--accent); color:#fff; border:0; border-radius:6px; padding:9px 18px; font:inherit; font-weight:600; cursor:pointer; }
-  button.secondary { background:#fff; color:var(--accent); border:1px solid var(--accent); margin-left:6px; }
-  .status { display:inline-flex; align-items:center; gap:8px; font-weight:600; }
-  .dot { width:10px; height:10px; border-radius:50%; background:#999; }
-  .ok .dot { background:var(--low); } .fail .dot { background:var(--high); }
-  .badge { display:inline-block; padding:3px 10px; border-radius:999px; color:#fff; font-weight:700; }
-  .HIGH { background:var(--high); } .MEDIUM { background:var(--med); } .LOW { background:var(--low); }
-  dl { display:grid; grid-template-columns:max-content 1fr; gap:6px 14px; margin:12px 0 0; }
-  dt { color:var(--muted); } dd { margin:0; }
-  pre { background:#0f1720; color:#d6e2f0; padding:12px; border-radius:6px; overflow:auto; font-size:13px; }
-  ul.links { margin:0; padding-left:18px; }
-  .figs { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin-top:12px; }
-  .figs img { width:100%; border:1px solid var(--line); border-radius:6px; background:#fff; }
-  .note { color:var(--muted); font-size:13px; }
-  @media (max-width:600px) { .row { grid-template-columns:1fr; } }
+  :root {
+    --paper: #F4F6F5;
+    --sheet: #FFFFFF;
+    --ink: #1F2D52;
+    --ink-soft: #55607A;
+    --rule: #CBD4DC;
+    --rule-soft: #E3E8EC;
+    --marker: #FFE15A;
+    --high: #C4302B;
+    --high-wash: #FBE9E8;
+    --medium: #B87400;
+    --medium-wash: #FDF1DC;
+    --low: #2F7D4F;
+    --low-wash: #E6F2EA;
+    --focus: #3D6BE0;
+    --sans: "Public Sans", "Segoe UI", system-ui, sans-serif;
+    --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 400 16px/1.55 var(--sans);
+  }
+  a { color: var(--ink); text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  a:hover { text-decoration-thickness: 2px; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+  /* ---------- Barra superior ---------- */
+  .topbar {
+    border-bottom: 1px solid var(--rule);
+    background: var(--sheet);
+  }
+  .topbar-inner {
+    max-width: 1160px; margin: 0 auto; padding: 14px 24px;
+    display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -0.01em; text-decoration: none; }
+  .brand svg { width: 28px; height: 28px; }
+  .status { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-soft); }
+  .status::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--rule); }
+  .status[data-state="ok"]::before { background: var(--low); box-shadow: 0 0 0 3px var(--low-wash); }
+  .status[data-state="fail"]::before { background: var(--high); box-shadow: 0 0 0 3px var(--high-wash); }
+  .toplinks { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 14px; }
+  .toplinks a { white-space: nowrap; }
+
+  /* ---------- Intro ---------- */
+  main { max-width: 1160px; margin: 0 auto; padding: 40px 24px 72px; }
+  .intro { max-width: 46rem; margin-bottom: 32px; }
+  .intro h1 {
+    font-size: clamp(28px, 4vw, 40px); line-height: 1.12; letter-spacing: -0.02em;
+    font-weight: 800; margin: 0 0 12px;
+  }
+  .intro p { margin: 0; color: var(--ink-soft); font-size: 17px; }
+
+  /* ---------- Mesa de trabajo: hoja + decisión ---------- */
+  .desk { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 28px; align-items: start; }
+
+  .sheet {
+    background: var(--sheet);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    box-shadow: 0 1px 0 var(--rule-soft), 0 12px 28px -18px rgba(31, 45, 82, 0.35);
+  }
+  .sheet-head {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+    padding: 18px 24px; border-bottom: 2px solid var(--ink);
+  }
+  .sheet-head h2 { margin: 0; font-size: 18px; font-weight: 700; }
+  .sheet-head span { font-size: 13px; color: var(--ink-soft); }
+  .sheet-body { padding: 20px 24px 24px; }
+
+  .field { margin-bottom: 18px; }
+  .field label, legend { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; padding: 0; }
+  .field .hint { font-weight: 400; color: var(--ink-soft); }
+  fieldset { border: 0; margin: 0 0 18px; padding: 0; min-width: 0; }
+
+  input[type="text"] {
+    width: 100%; max-width: 16rem; font: 500 15px var(--sans); color: var(--ink);
+    padding: 8px 10px; border: 1px solid var(--rule); border-radius: 3px; background: var(--sheet);
+  }
+
+  .segmented { display: inline-flex; border: 1px solid var(--ink); border-radius: 3px; overflow: hidden; }
+  .segmented input { position: absolute; opacity: 0; pointer-events: none; }
+  .segmented label {
+    margin: 0; padding: 7px 16px; font-size: 14px; font-weight: 600; cursor: pointer;
+    border-left: 1px solid var(--ink); background: var(--sheet); color: var(--ink);
+  }
+  .segmented label:first-of-type { border-left: 0; }
+  .segmented input:checked + label { background: var(--ink); color: var(--sheet); }
+  .segmented input:focus-visible + label { outline: 3px solid var(--focus); outline-offset: -3px; }
+
+  .note {
+    width: 100%; min-height: 9.5rem; resize: vertical;
+    font: 400 18px/1.75 var(--serif); color: var(--ink);
+    padding: 4px 2px; border: 0; border-radius: 0;
+    background:
+      linear-gradient(transparent calc(1.75em - 1px), var(--rule-soft) calc(1.75em - 1px)) 0 4px / 100% 1.75em local,
+      var(--sheet);
+  }
+  .note:focus-visible { outline-offset: 4px; }
+  .note-meta { display: flex; justify-content: space-between; font-size: 13px; color: var(--ink-soft); margin-top: 6px; }
+
+  .actions { display: flex; align-items: center; gap: 16px; margin-top: 8px; }
+  .btn-primary {
+    font: 700 15px var(--sans); color: var(--sheet); background: var(--ink);
+    border: 0; border-radius: 3px; padding: 11px 22px; cursor: pointer;
+  }
+  .btn-primary:hover { background: #2B3D6E; }
+  .btn-primary[disabled] { opacity: 0.6; cursor: progress; }
+
+  .samples { border-top: 1px solid var(--rule); padding: 18px 24px 22px; }
+  .samples h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+  .samples ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .sample {
+    width: 100%; text-align: left; cursor: pointer;
+    display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: baseline;
+    font: 400 15px/1.45 var(--serif); color: var(--ink);
+    background: transparent; border: 1px solid transparent; border-radius: 3px; padding: 8px 10px;
+  }
+  .sample:hover { background: var(--paper); border-color: var(--rule); }
+  .sample small { font: 500 12px var(--sans); color: var(--ink-soft); white-space: nowrap; }
+
+  /* ---------- Decisión ---------- */
+  .decision { position: sticky; top: 20px; }
+  .verdict {
+    border-radius: 4px; border: 1px solid var(--rule); background: var(--sheet);
+    overflow: hidden;
+  }
+  .verdict-empty { padding: 28px 24px; color: var(--ink-soft); }
+  .verdict-empty p { margin: 0; }
+  .verdict-band { padding: 20px 24px 18px; border-left: 8px solid var(--rule); }
+  .verdict[data-priority="HIGH"] .verdict-band { border-left-color: var(--high); background: var(--high-wash); }
+  .verdict[data-priority="MEDIUM"] .verdict-band { border-left-color: var(--medium); background: var(--medium-wash); }
+  .verdict[data-priority="LOW"] .verdict-band { border-left-color: var(--low); background: var(--low-wash); }
+  .verdict-label { font-size: 14px; color: var(--ink-soft); margin: 0 0 2px; }
+  .verdict-word { font-size: 52px; line-height: 1; font-weight: 800; letter-spacing: -0.03em; margin: 0; }
+  .verdict[data-priority="HIGH"] .verdict-word { color: var(--high); }
+  .verdict[data-priority="MEDIUM"] .verdict-word { color: var(--medium); }
+  .verdict[data-priority="LOW"] .verdict-word { color: var(--low); }
+  .verdict-why { margin: 10px 0 0; font-size: 15px; }
+
+  .verdict-section { padding: 16px 24px; border-top: 1px solid var(--rule-soft); }
+  .verdict-section h3 { margin: 0 0 8px; font-size: 14px; font-weight: 600; }
+
+  .meter { position: relative; height: 10px; background: var(--rule-soft); border-radius: 5px; margin: 26px 0 8px; }
+  .meter-fill { position: absolute; inset: 0 auto 0 0; border-radius: 5px; background: var(--ink); width: 0; transition: width .35s ease; }
+  .meter-tick { position: absolute; top: -8px; bottom: -8px; width: 2px; background: var(--high); }
+  .meter-tick span {
+    position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%);
+    font-size: 12px; white-space: nowrap; color: var(--high); font-weight: 600;
+  }
+  .meter-scale { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-soft); }
+  .score-line { font-size: 15px; margin: 4px 0 0; }
+  .score-line strong { font-variant-numeric: tabular-nums; }
+
+  .readback { font: 400 17px/1.75 var(--serif); margin: 0; overflow-wrap: anywhere; }
+  mark.alarm {
+    color: inherit; padding: 0 2px; margin: 0 -2px; border-radius: 2px;
+    background: linear-gradient(100deg, rgba(255,225,90,0) 0.5%, var(--marker) 3%, var(--marker) 96%, rgba(255,225,90,0.4) 99%);
+    box-decoration-break: clone; -webkit-box-decoration-break: clone;
+  }
+  mark.negated {
+    background: none; color: var(--ink-soft);
+    text-decoration: line-through; text-decoration-thickness: 2px; text-decoration-color: var(--ink-soft);
+  }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--ink-soft); margin-top: 10px; }
+  .legend mark { font: inherit; }
+
+  .facts { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 15px; }
+  .facts dt { color: var(--ink-soft); }
+  .facts dd { margin: 0; }
+  .review { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; }
+  .review svg { flex: none; width: 20px; height: 20px; margin-top: 2px; }
+
+  details.raw summary { cursor: pointer; font-size: 14px; color: var(--ink-soft); }
+  details.raw pre {
+    margin: 10px 0 0; padding: 12px; background: var(--paper); border: 1px solid var(--rule-soft);
+    border-radius: 3px; font: 13px/1.5 Consolas, "SFMono-Regular", monospace; overflow: auto;
+  }
+
+  .error {
+    margin-top: 14px; padding: 12px 14px; border-left: 4px solid var(--high);
+    background: var(--high-wash); font-size: 15px;
+  }
+
+  /* ---------- Cómo decide ---------- */
+  .section { margin-top: 64px; }
+  .section > h2 { font-size: 26px; letter-spacing: -0.015em; margin: 0 0 6px; font-weight: 800; }
+  .section > p { margin: 0 0 24px; color: var(--ink-soft); max-width: 46rem; }
+
+  .flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); counter-reset: step; }
+  .flow li { counter-increment: step; padding: 0 20px 0 0; position: relative; }
+  .flow li::before {
+    content: counter(step); display: grid; place-items: center;
+    width: 32px; height: 32px; border-radius: 50%;
+    border: 2px solid var(--ink); font-weight: 800; background: var(--paper); position: relative; z-index: 1;
+  }
+  .flow li::after { content: ""; position: absolute; top: 16px; left: 32px; right: 0; height: 2px; background: var(--rule); }
+  .flow li:last-child::after { display: none; }
+  .flow li.active::before { background: var(--ink); color: var(--sheet); }
+  .flow h3 { font-size: 16px; margin: 14px 0 4px; }
+  .flow p { margin: 0; font-size: 15px; color: var(--ink-soft); }
+
+  /* ---------- Documentación ---------- */
+  .docs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 32px; align-items: start; }
+  .downloads { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+  .downloads li { border-bottom: 1px solid var(--rule); }
+  .downloads a { display: flex; justify-content: space-between; gap: 12px; padding: 12px 2px; text-decoration: none; font-weight: 600; }
+  .downloads a:hover span:first-child { text-decoration: underline; }
+  .downloads small { font-weight: 400; color: var(--ink-soft); white-space: nowrap; }
+  .figures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .figures figure { margin: 0; }
+  .figures a { display: block; background: var(--sheet); border: 1px solid var(--rule); border-radius: 3px; padding: 8px; }
+  .figures img { display: block; width: 100%; height: 150px; object-fit: contain; }
+  .figures figcaption { font-size: 14px; margin-top: 8px; }
+
+  footer { border-top: 1px solid var(--rule); margin-top: 64px; }
+  footer p { max-width: 1160px; margin: 0 auto; padding: 18px 24px 28px; font-size: 13px; color: var(--ink-soft); }
+
+  @media (max-width: 900px) {
+    .desk, .docs { grid-template-columns: 1fr; }
+    .decision { position: static; }
+    .flow { grid-template-columns: 1fr 1fr; row-gap: 28px; }
+    .flow li:nth-child(2)::after { display: none; }
+  }
+  @media (max-width: 560px) {
+    main { padding: 28px 16px 56px; }
+    .topbar-inner { padding: 12px 16px; gap: 12px; }
+    .toplinks { margin-left: 0; width: 100%; }
+    .sheet-head, .sheet-body, .samples, .verdict-band, .verdict-section, .verdict-empty { padding-left: 16px; padding-right: 16px; }
+    .flow { grid-template-columns: 1fr; }
+    .flow li::after { display: none; }
+    .figures { grid-template-columns: 1fr; }
+    .segmented label { padding: 7px 12px; }
+    .verdict-word { font-size: 44px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .meter-fill { transition: none; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>PrioMed</h1>
-  <p>Clasificación de prioridad de remisiones: guardrail de reglas + ML + umbral Neyman-Pearson (prototipo académico, datos sintéticos)</p>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/" aria-label="PrioMed, inicio">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="6" fill="#1F2D52"/><path d="M13 7h6v6h6v6h-6v6h-6v-6H7v-6h6z" fill="#FFE15A"/></svg>
+      PrioMed
+    </a>
+    <span id="status" class="status" role="status">Comprobando el servicio…</span>
+    <nav class="toplinks" aria-label="Enlaces de la API">
+      <a href="/docs">Documentación de la API</a>
+      <a href="/health">Estado</a>
+      <a href="#documentos">Artículo y figuras</a>
+    </nav>
+  </div>
 </header>
+
 <main>
-  <section class="card">
-    <h2>Estado del servicio</h2>
-    <span id="health" class="status"><span class="dot"></span><span>Comprobando…</span></span>
-    <p class="note">API: <a href="/docs">Swagger UI (/docs)</a> · <a href="/health">/health</a> · <a href="/openapi.json">/openapi.json</a></p>
+  <section class="intro">
+    <h1>¿Qué remisión debe atenderse primero?</h1>
+    <p>Pega el texto de una remisión y la urgencia que registró el médico. PrioMed busca señales de alarma en la nota, estima el riesgo con un modelo y muestra en qué se basó. Toda decisión pasa por revisión humana.</p>
   </section>
 
-  <section class="card">
-    <h2>Clasificar una remisión</h2>
-    <form id="form">
-      <div class="row">
-        <div>
-          <label for="rid">ID de remisión</label>
-          <input id="rid" value="demo-001" maxlength="64" required>
+  <div class="desk">
+    <form id="form" class="sheet" novalidate>
+      <div class="sheet-head">
+        <h2>Remisión</h2>
+        <span>Datos sintéticos, prototipo académico</span>
+      </div>
+      <div class="sheet-body">
+        <div class="field">
+          <label for="rid">Número de remisión</label>
+          <input id="rid" type="text" value="REM-0001" maxlength="64" required autocomplete="off">
         </div>
-        <div>
-          <label for="urg">Urgencia registrada por el médico</label>
-          <select id="urg">
-            <option value="0">0 · baja</option>
-            <option value="1">1 · media</option>
-            <option value="2">2 · alta</option>
-          </select>
+        <fieldset>
+          <legend>Urgencia registrada por el médico</legend>
+          <div class="segmented">
+            <input type="radio" name="urg" id="urg0" value="0" checked><label for="urg0">Baja</label>
+            <input type="radio" name="urg" id="urg1" value="1"><label for="urg1">Media</label>
+            <input type="radio" name="urg" id="urg2" value="2"><label for="urg2">Alta</label>
+          </div>
+        </fieldset>
+        <div class="field">
+          <label for="text">Nota clínica <span class="hint">(texto libre de la remisión)</span></label>
+          <textarea id="text" class="note" maxlength="5000" required spellcheck="false">Paciente de 58 años con dolor torácico opresivo de inicio reciente. Sin alergias conocidas.</textarea>
+          <div class="note-meta"><span>Máximo 5000 caracteres</span><span id="count"></span></div>
+        </div>
+        <div class="actions">
+          <button id="submit" class="btn-primary" type="submit">Clasificar remisión</button>
+        </div>
+        <div id="error" class="error" role="alert" hidden></div>
+      </div>
+
+      <div class="samples">
+        <h3>Probar con una nota de ejemplo</h3>
+        <ul>
+          <li><button type="button" class="sample" data-urg="0" data-text="Sin alergias conocidas. Disnea severa desde ayer, no tolera el decúbito.">Sin alergias conocidas. Disnea severa desde ayer, no tolera el decúbito.<small>urgencia baja</small></button></li>
+          <li><button type="button" class="sample" data-urg="1" data-text="Paciente sin dolor torácico pero con falta de aire al caminar.">Paciente sin dolor torácico pero con falta de aire al caminar.<small>urgencia media</small></button></li>
+          <li><button type="button" class="sample" data-urg="0" data-text="Refiere fiebre alta y vómitos persistentes de tres días.">Refiere fiebre alta y vómitos persistentes de tres días.<small>urgencia baja</small></button></li>
+          <li><button type="button" class="sample" data-urg="2" data-text="Consulta por rinorrea y tos seca de dos semanas, buen estado general.">Consulta por rinorrea y tos seca de dos semanas, buen estado general.<small>urgencia alta</small></button></li>
+        </ul>
+      </div>
+    </form>
+
+    <aside class="decision" aria-live="polite">
+      <div id="verdict" class="verdict">
+        <div class="verdict-empty" id="empty">
+          <p>La prioridad sugerida aparecerá aquí, junto con las frases de la nota que la explican.</p>
+        </div>
+        <div id="filled" hidden>
+          <div class="verdict-band">
+            <p class="verdict-label">Prioridad sugerida</p>
+            <p class="verdict-word" id="v-word"></p>
+            <p class="verdict-why" id="v-why"></p>
+          </div>
+          <div class="verdict-section">
+            <h3>Lo que leyó en la nota</h3>
+            <p class="readback" id="v-readback"></p>
+            <div class="legend" id="v-legend">
+              <span><mark class="alarm">señal de alarma</mark></span>
+              <span><mark class="negated">señal negada</mark></span>
+            </div>
+          </div>
+          <div class="verdict-section">
+            <h3>Riesgo estimado por el modelo</h3>
+            <div class="meter" aria-hidden="true">
+              <div class="meter-fill" id="v-fill"></div>
+              <div class="meter-tick" id="v-tick"><span id="v-tick-label"></span></div>
+            </div>
+            <div class="meter-scale" aria-hidden="true"><span>0</span><span>1</span></div>
+            <p class="score-line" id="v-score"></p>
+          </div>
+          <div class="verdict-section">
+            <dl class="facts">
+              <dt>Remisión</dt><dd id="v-id"></dd>
+              <dt>Urgencia registrada</dt><dd id="v-urg"></dd>
+              <dt>Señales activas</dt><dd id="v-signs"></dd>
+            </dl>
+          </div>
+          <div class="verdict-section">
+            <p class="review">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="7" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M3.5 17.5c.8-3.3 3.4-5 6.5-5s5.7 1.7 6.5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+              <span id="v-review"></span>
+            </p>
+          </div>
+          <div class="verdict-section">
+            <details class="raw">
+              <summary>Ver respuesta de la API</summary>
+              <pre id="v-raw"></pre>
+            </details>
+          </div>
         </div>
       </div>
-      <label for="text">Texto libre</label>
-      <textarea id="text" maxlength="5000" required>Paciente con dolor torácico de inicio reciente, sin alergias conocidas.</textarea>
-      <button type="submit">Clasificar</button>
-      <button type="button" class="secondary" data-ex="Sin alergias conocidas. Disnea severa desde ayer.">Ejemplo: negación previa</button>
-      <button type="button" class="secondary" data-ex="Consulta por rinorrea y tos seca de 2 semanas.">Ejemplo: benigno</button>
-      <button type="button" class="secondary" data-ex="Refiere fiebre alta y vómitos persistentes.">Ejemplo: media</button>
-    </form>
-    <div id="result" hidden>
-      <dl>
-        <dt>Prioridad</dt><dd><span id="r-priority" class="badge"></span></dd>
-        <dt>Origen</dt><dd id="r-source"></dd>
-        <dt>P(HIGH)</dt><dd id="r-score"></dd>
-        <dt>Señales de alarma</dt><dd id="r-signs"></dd>
-        <dt>Revisión humana</dt><dd id="r-review"></dd>
-      </dl>
-      <pre id="r-raw"></pre>
-    </div>
-    <p id="error" class="note" hidden></p>
+    </aside>
+  </div>
+
+  <section class="section" aria-labelledby="flow-title">
+    <h2 id="flow-title">Cómo decide</h2>
+    <p>Cada remisión recorre los mismos cuatro pasos. El paso que tomó la decisión se marca en oscuro después de clasificar.</p>
+    <ol class="flow">
+      <li id="step-1"><h3>Regla de alarma</h3><p>Busca frases como “dolor torácico” o “disnea”. Si hay una sin negar, la prioridad es alta sin consultar al modelo.</p></li>
+      <li id="step-2"><h3>Modelo de riesgo</h3><p>TF-IDF y regresión logística sobre la nota y la urgencia registrada estiman la probabilidad de prioridad alta.</p></li>
+      <li id="step-3"><h3>Umbral Neyman-Pearson</h3><p>El corte se calibra para no dejar pasar más del 5 % de los casos graves, con 95 % de confianza.</p></li>
+      <li id="step-4"><h3>Revisión humana</h3><p>La sugerencia nunca se aplica sola: un profesional la confirma o la corrige.</p></li>
+    </ol>
   </section>
 
-  <section class="card">
-    <h2>Documentación del proyecto</h2>
-    <ul class="links">
-      <li><a href="/docs-proyecto/Articulo_Proyecto_Triage_Expandido.docx">Artículo (.docx)</a></li>
-      <li><a href="/docs-proyecto/PrioMed_Presentacion.pptx">Presentación (.pptx)</a></li>
-      <li><a href="/docs-proyecto/evaluation_report.md">Reporte de evaluación (datos sintéticos)</a></li>
-    </ul>
-    <div class="figs">
-      <figure><img src="/docs-proyecto/fig1_enterprise.png" alt="Figura 1: arquitectura empresarial"><figcaption class="note">Figura 1 · Arquitectura empresarial</figcaption></figure>
-      <figure><img src="/docs-proyecto/fig2_application.png" alt="Figura 2: arquitectura de aplicación"><figcaption class="note">Figura 2 · Aplicación</figcaption></figure>
-      <figure><img src="/docs-proyecto/fig3_deployment.png" alt="Figura 3: despliegue"><figcaption class="note">Figura 3 · Despliegue</figcaption></figure>
+  <section class="section" id="documentos" aria-labelledby="docs-title">
+    <h2 id="docs-title">Artículo y figuras</h2>
+    <p>Documentación del proyecto de Arquitectura Empresarial y Transformación Digital.</p>
+    <div class="docs">
+      <ul class="downloads">
+        <li><a href="/docs-proyecto/Articulo_Proyecto_Triage_Expandido.docx" download><span>Artículo completo</span><small>Word, 376 KB</small></a></li>
+        <li><a href="/docs-proyecto/PrioMed_Presentacion.pptx" download><span>Presentación</span><small>PowerPoint, 710 KB</small></a></li>
+        <li><a href="/docs-proyecto/evaluation_report.md"><span>Reporte de evaluación</span><small>Markdown, 2 KB</small></a></li>
+        <li><a href="/docs"><span>Documentación de la API</span><small>Swagger</small></a></li>
+      </ul>
+      <div class="figures">
+        <figure><a href="/docs-proyecto/fig1_enterprise.png"><img src="/docs-proyecto/fig1_enterprise.png" alt="Figura 1: arquitectura empresarial de PrioMed" loading="lazy"></a><figcaption>Figura 1. Arquitectura empresarial</figcaption></figure>
+        <figure><a href="/docs-proyecto/fig2_application.png"><img src="/docs-proyecto/fig2_application.png" alt="Figura 2: arquitectura de aplicación de PrioMed" loading="lazy"></a><figcaption>Figura 2. Arquitectura de aplicación</figcaption></figure>
+        <figure><a href="/docs-proyecto/fig3_deployment.png"><img src="/docs-proyecto/fig3_deployment.png" alt="Figura 3: plan de despliegue en AWS" loading="lazy"></a><figcaption>Figura 3. Plan de despliegue</figcaption></figure>
+      </div>
     </div>
   </section>
 </main>
+
+<footer>
+  <p>PrioMed es un prototipo académico entrenado con datos sintéticos. No usar para decisiones clínicas reales.</p>
+</footer>
+
 <script>
   const $ = (id) => document.getElementById(id);
-  fetch("/health").then(r => r.ok ? r.json() : Promise.reject(r.status))
-    .then(j => { $("health").className = "status ok"; $("health").lastElementChild.textContent = "En línea (" + j.status + ")"; })
-    .catch(e => { $("health").className = "status fail"; $("health").lastElementChild.textContent = "Sin respuesta (" + e + ")"; });
+  const PRIORITY = { HIGH: "Alta", MEDIUM: "Media", LOW: "Baja" };
+  const URGENCY = ["Baja", "Media", "Alta"];
+  const SIGNS = {
+    dolor_toracico: "Dolor torácico",
+    ideacion_suicida: "Ideación suicida",
+    dificultad_respiratoria: "Dificultad respiratoria",
+    sincope: "Síncope",
+    herida_arma_fuego: "Herida por arma de fuego",
+  };
+  const fmt = (x) => x.toLocaleString("es-CO", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
-  document.querySelectorAll("[data-ex]").forEach(b => b.addEventListener("click", () => {
-    $("text").value = b.dataset.ex; $("urg").value = "0"; $("form").requestSubmit();
+  // ---- Estado del servicio
+  fetch("/health")
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status))))
+    .then(() => { $("status").dataset.state = "ok"; $("status").textContent = "Servicio en línea"; })
+    .catch(() => { $("status").dataset.state = "fail"; $("status").textContent = "Servicio sin respuesta"; });
+
+  // ---- Contador de caracteres
+  const updateCount = () => { $("count").textContent = $("text").value.length + " / 5000"; };
+  $("text").addEventListener("input", updateCount);
+  updateCount();
+
+  // ---- Notas de ejemplo
+  document.querySelectorAll(".sample").forEach((b) => b.addEventListener("click", () => {
+    $("text").value = b.dataset.text;
+    document.querySelector(`input[name="urg"][value="${b.dataset.urg}"]`).checked = true;
+    updateCount();
+    $("form").requestSubmit();
   }));
+
+  // ---- Resaltado de frases sobre el texto original.
+  // La API devuelve las frases normalizadas (minúsculas, sin tildes) en orden de aparición;
+  // aquí se ubican en el texto original plegando cada carácter sin cambiar las posiciones.
+  function fold(text) {
+    let out = "";
+    for (const ch of text) {
+      const base = ch.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+      out += base.length === ch.length ? base : ch.toLowerCase();
+    }
+    return out;
+  }
+  function renderReadback(text, evidence) {
+    const folded = fold(text);
+    const spans = [];
+    let cursor = 0;
+    for (const ev of evidence) {
+      const words = ev.phrase.split(" ").map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+      const re = new RegExp("(?<![a-z0-9])" + words.join("[^a-z0-9]+") + "(?![a-z0-9])", "g");
+      re.lastIndex = cursor;
+      const m = re.exec(folded);
+      if (!m) continue;
+      spans.push({ start: m.index, end: m.index + m[0].length, ev });
+      cursor = m.index + m[0].length;
+    }
+    const el = $("v-readback");
+    el.textContent = "";
+    let pos = 0;
+    for (const s of spans) {
+      el.append(text.slice(pos, s.start));
+      const mark = document.createElement("mark");
+      mark.className = s.ev.negated ? "negated" : "alarm";
+      mark.title = (SIGNS[s.ev.sign] || s.ev.sign) + (s.ev.negated ? " (negada)" : "");
+      mark.textContent = text.slice(s.start, s.end);
+      el.append(mark);
+      pos = s.end;
+    }
+    el.append(text.slice(pos));
+    $("v-legend").hidden = spans.length === 0;
+  }
+
+  function explain(j) {
+    if (j.source === "guardrail") {
+      const names = j.alarm_signs.map((s) => (SIGNS[s] || s).toLowerCase()).join(" y ");
+      return `La nota menciona ${names} sin negarlo. La regla de alarma fija la prioridad alta.`;
+    }
+    const t = j.high_threshold;
+    if (j.priority === "HIGH") {
+      return `No hay señales de alarma activas, pero el riesgo del modelo (${fmt(j.high_score)}) supera el umbral de ${fmt(t)}.`;
+    }
+    return `No hay señales de alarma activas y el riesgo del modelo (${fmt(j.high_score)}) está por debajo del umbral de ${fmt(t)}.`;
+  }
+
+  function show(j, text, urg) {
+    $("empty").hidden = true;
+    $("filled").hidden = false;
+    $("verdict").dataset.priority = j.priority;
+    $("v-word").textContent = PRIORITY[j.priority] || j.priority;
+    $("v-why").textContent = explain(j);
+    renderReadback(text, j.evidence || []);
+
+    $("v-fill").style.width = (j.high_score * 100).toFixed(1) + "%";
+    const t = j.high_threshold ?? 0.5;
+    $("v-tick").style.left = `calc(${(t * 100).toFixed(1)}% - 1px)`;
+    $("v-tick-label").textContent = "umbral " + fmt(t);
+    $("v-score").innerHTML = `P(alta) = <strong>${fmt(j.high_score)}</strong>`;
+
+    $("v-id").textContent = j.referral_id;
+    $("v-urg").textContent = URGENCY[urg];
+    $("v-signs").textContent = j.alarm_signs.length ? j.alarm_signs.map((s) => SIGNS[s] || s).join(", ") : "Ninguna";
+    $("v-review").textContent = j.requires_human_review
+      ? "Sugerencia pendiente de revisión por un profesional."
+      : "Sin revisión humana requerida.";
+    $("v-raw").textContent = JSON.stringify(j, null, 2);
+
+    document.querySelectorAll(".flow li").forEach((li) => li.classList.remove("active"));
+    $(j.source === "guardrail" ? "step-1" : "step-3").classList.add("active");
+  }
+
+  function fail(message) {
+    $("error").textContent = message;
+    $("error").hidden = false;
+  }
 
   $("form").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     $("error").hidden = true;
-    const body = { referral_id: $("rid").value, text: $("text").value, structured_urgency: Number($("urg").value) };
+    const text = $("text").value.trim();
+    const rid = $("rid").value.trim();
+    const urg = Number(document.querySelector('input[name="urg"]:checked').value);
+    if (!rid) { fail("Escribe un número de remisión."); $("rid").focus(); return; }
+    if (!text) { fail("Escribe la nota clínica de la remisión para poder clasificarla."); $("text").focus(); return; }
+
+    const btn = $("submit");
+    btn.disabled = true;
+    btn.textContent = "Clasificando…";
     try {
-      const r = await fetch("/classify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const j = await r.json();
-      if (!r.ok) throw new Error(r.status + " " + JSON.stringify(j.detail ?? j));
-      $("r-priority").textContent = j.priority; $("r-priority").className = "badge " + j.priority;
-      $("r-source").textContent = j.source === "guardrail" ? "guardrail (regla de señal de alarma)" : "modelo ML + umbral NP";
-      $("r-score").textContent = j.high_score.toFixed(4);
-      $("r-signs").textContent = j.alarm_signs.length ? j.alarm_signs.join(", ") : "ninguna";
-      $("r-review").textContent = j.requires_human_review ? "sí, requerida" : "no";
-      $("r-raw").textContent = JSON.stringify(j, null, 2);
-      $("result").hidden = false;
+      const r = await fetch("/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ referral_id: rid, text, structured_urgency: urg }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const detail = Array.isArray(j.detail) ? j.detail.map((d) => d.msg).join("; ") : (j.detail || "");
+        throw new Error(`La API rechazó la remisión (HTTP ${r.status}). ${detail}`);
+      }
+      show(j, text, urg);
     } catch (e) {
-      $("error").textContent = "Error: " + e.message; $("error").hidden = false;
+      fail(e.message.startsWith("La API") ? e.message : "No se pudo contactar el servicio. Revisa que esté en línea e inténtalo de nuevo.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Clasificar remisión";
     }
   });
 </script>
