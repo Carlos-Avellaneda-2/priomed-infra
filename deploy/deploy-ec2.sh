@@ -46,10 +46,13 @@ if [ ! -f .env ]; then
     umask 077  # solo en este subshell: .env legible solo por el dueño
     cat > .env <<ENV
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
-PRIOMED_CORS_ORIGINS=http://priomed.$PUBLIC_IP.nip.io,http://priomed.$PUBLIC_IP.sslip.io,http://localhost:5173
+PRIOMED_CORS_ORIGINS=
 ENV
   )
 fi
+# La IP pública cambia en cada stop/start sin Elastic IP: los orígenes CORS se
+# recalculan siempre (la contraseña se conserva).
+sed -i "s|^PRIOMED_CORS_ORIGINS=.*|PRIOMED_CORS_ORIGINS=http://priomed.$PUBLIC_IP.nip.io,http://priomed.$PUBLIC_IP.sslip.io,http://localhost:5173|" .env
 
 # 4. Contenedores
 echo ">> Construyendo y levantando contenedores"
