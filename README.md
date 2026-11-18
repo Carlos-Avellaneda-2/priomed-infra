@@ -62,9 +62,17 @@ ssh -i Llave.pem ec2-user@<IP> 'mkdir -p ~/priomed && tar -xzf /tmp/priomed.tgz 
   && bash ~/priomed/priomed-infra/deploy/deploy-ec2.sh'
 ```
 
-Resultado: `http://priomed.<IP>.nip.io/` (portal) y `http://priomed.<IP>.nip.io/docs` (Swagger).
-El security group solo necesita los puertos 22 y 80; 8000/5432/6379 quedan internos.
-Si la IP pública de la instancia cambia (stop/start sin Elastic IP), vuelve a correr el script.
+Resultado: `https://priomed.<IP>.nip.io/` (portal) y `https://priomed.<IP>.nip.io/docs` (Swagger);
+también responde por HTTP. El security group necesita los puertos 22, 80 y 443; 8000/5432/6379
+quedan internos. Si la IP pública de la instancia cambia (stop/start sin Elastic IP), vuelve a
+correr el script.
+
+**HTTPS.** Brave y Chrome pueden cambiar `http://` por `https://` automáticamente. Sin un
+VirtualHost :443 propio, esa petición caería en el sitio por defecto del servidor (otro proyecto) y
+mostraría su página con un certificado ajeno. Por eso el script pide un certificado de Let's
+Encrypt para `priomed.<IP>.nip.io` en modo webroot (sin tocar la configuración de otros sitios),
+usando la cuenta ACME ya registrada en el servidor, e instala `priomed-httpd-ssl.conf`. Si no hay
+cuenta o la emisión falla, el portal queda disponible solo por HTTP.
 
 Para actualizar solo el portal sin reconstruir contenedores:
 

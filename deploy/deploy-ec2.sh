@@ -52,7 +52,7 @@ ENV
 fi
 # La IP pública cambia en cada stop/start sin Elastic IP: los orígenes CORS se
 # recalculan siempre (la contraseña se conserva).
-sed -i "s|^PRIOMED_CORS_ORIGINS=.*|PRIOMED_CORS_ORIGINS=http://priomed.$PUBLIC_IP.nip.io,http://priomed.$PUBLIC_IP.sslip.io,http://localhost:5173|" .env
+sed -i "s|^PRIOMED_CORS_ORIGINS=.*|PRIOMED_CORS_ORIGINS=https://priomed.$PUBLIC_IP.nip.io,http://priomed.$PUBLIC_IP.nip.io,http://priomed.$PUBLIC_IP.sslip.io,http://localhost:5173|" .env
 
 # 4. Contenedores
 echo ">> Construyendo y levantando contenedores"
@@ -78,4 +78,25 @@ sudo apachectl configtest
 sudo systemctl enable httpd >/dev/null
 sudo systemctl reload httpd
 
-echo ">> Listo: http://priomed.$PUBLIC_IP.nip.io/  ·  Swagger: http://priomed.$PUBLIC_IP.nip.io/docs"
+# 7. HTTPS con Let's Encrypt para el nombre de esta IP.
+# Los navegadores que fuerzan HTTPS (Brave, Chrome con "Usar siempre HTTPS") llegarían si no al
+# VirtualHost :443 por defecto del servidor, que es otro sitio. Se usa el modo webroot para no
+# modificar la configuración de los demás sitios, y la cuenta ACME ya registrada en el servidor.
+DOMAIN="priomed.$PUBLIC_IP.nip.io"
+if sudo test -d /etc/letsencrypt/accounts/acme-v02.api.letsencrypt.org; then
+  if ! sudo test -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem"; then
+    echo ">> Pidiendo certificado para $DOMAIN"
+    sudo certbot certonly --webroot -w "$WEB" -d "$DOMAIN" --non-interactive --quiet \
+      || echo "!! No se pudo emitir el certificado; el portal sigue disponible por HTTP"
+  fi
+  if sudo test -f "/etc/letsencrypt/live/$DOMAIN/fullchain.pem"; then
+    sed "s/__PUBLIC_IP__/$PUBLIC_IP/g" "$INFRA/deploy/priomed-httpd-ssl.conf" | sudo tee /etc/httpd/conf.d/priomed-ssl.conf >/dev/null
+    sudo apachectl configtest
+    sudo systemctl reload httpd
+    echo ">> HTTPS activo: https://$DOMAIN/"
+  fi
+else
+  echo "!! Sin cuenta de Let's Encrypt en el servidor: el portal queda solo por HTTP"
+fi
+
+echo ">> Listo: http://$DOMAIN/  ·  Swagger: http://$DOMAIN/docs"
